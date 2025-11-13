@@ -1,57 +1,89 @@
-# Analisis Kode: Modularitas *Templating* (Jinja2)
+# Analisis Kode: Menyajikan *Static Assets* (CSS/JS)
 
-Pada tahap ini, didemonstrasikan salah satu filosofi inti Pyramid: **netralitas *tooling***. Ini membuktikan bahwa *templating engine* adalah komponen yang dapat diganti (*pluggable*). Aplikasi ini secara fungsional identik dengan Materi 9 (View Classes), namun *renderer* (mesin templat) diganti dari Chameleon (`.pt`) menjadi Jinja2 (`.jinja2`).
+Pada tahap ini, diperkenalkan kemampuan untuk menyajikan file statis (seperti CSS, JavaScript, dan gambar). Ini adalah komponen penting dari aplikasi web modern yang memisahkan *markup* (HTML) dari *styling* (CSS) dan *interactivity* (JS).
 
----
+-----
 
-## 1. Analisis Teknis dan Perubahan Struktural
+## 1\. Analisis Teknis dan Perubahan Struktural
 
-Perubahan ini berfokus pada penggantian komponen *rendering* tanpa menyentuh logika bisnis inti.
+Perubahan ini melibatkan penambahan *view* khusus untuk file statis di `__init__.py` dan memperbarui templat untuk mereferensikan file-file tersebut.
 
-* **`setup.py` (Dimodifikasi):**
-    * Dependensi `pyramid_jinja2` ditambahkan ke dalam daftar `install_requires`. Ini adalah dependensi *runtime* baru karena aplikasi sekarang bergantung padanya untuk me-*render* templat.
+  * **`tutorial/__init__.py` (Modifikasi Kunci):**
 
-* **`tutorial/__init__.py` (Dimodifikasi):**
-    * Ini adalah inti dari perubahan. Panggilan `config.include('pyramid_chameleon')` (dari materi sebelumnya) **diganti** menjadi `config.include('pyramid_jinja2')`.
-    * Dengan satu baris perubahan ini, *Application Factory* (`main`) sekarang mengaktifkan *renderer* Jinja2 alih-alih Chameleon.
+      * Satu baris konfigurasi imperatif ditambahkan:
+        ```python
+        config.add_static_view(name='static', path='tutorial:static')
+        ```
+      * **Analisis `add_static_view`:**
+          * Panggilan ini memberi tahu Pyramid untuk membuat *view* khusus yang secara otomatis menyajikan file dari *filesystem*.
+          * `name='static'`: Ini adalah **nama URL**. Ini memberi tahu Pyramid bahwa setiap URL yang dimulai dengan `/static/` (relatif terhadap *root* aplikasi) harus ditangani oleh *view* statis ini.
+          * `path='tutorial:static'`: Ini adalah **path fisik**. Ini menggunakan sintaks *asset specification* Pyramid untuk menunjuk ke direktori `static/` **di dalam** paket `tutorial/`.
 
-* **`tutorial/views.py` (Dimodifikasi):**
-    * Perubahan di sini minimal namun sangat penting.
-    * Dekorator `@view_defaults` diubah dari `renderer='home.pt'` menjadi `renderer='home.jinja2'`.
-    * Logika di dalam *method* `home()` dan `hello()` (yang mengembalikan *dictionary*) **sama sekali tidak berubah**.
+  * **`tutorial/static/app.css` (Baru):**
 
-* **`tutorial/home.pt` (Dihapus/Tidak Terpakai):**
-    * Templat Chameleon dari materi sebelumnya tidak lagi dirujuk.
+      * Ini adalah file fisik baru di dalam direktori `static/` yang baru dibuat. Ini adalah *asset* yang akan disajikan.
 
-* **`tutorial/home.jinja2` (Baru):**
-    * File ini menggantikan `home.pt`.
-    * File ini berisi HTML yang setara, tetapi menggunakan sintaks Jinja2 (`{{ name }}`) alih-alih sintaks Chameleon (`${name}`) untuk substitusi variabel.
+  * **`tutorial/home.pt` (Dimodifikasi):**
 
----
+      * Templat ini diubah untuk memuat file CSS baru:
+        ```html
+        <link rel="stylesheet"
+              href="${request.static_url('tutorial:static/app.css') }"/>
+        ```
+      * **Analisis `request.static_url`:**
+          * Ini adalah **metode *helper*** yang disediakan oleh Pyramid dan disuntikkan ke dalam konteks templat.
+          * Daripada melakukan *hard-coding* URL (`<link href="/static/app.css">`), templat menggunakan *helper* ini.
+          * `tutorial:static/app.css` adalah *asset specification* lengkap ke file tersebut. Pyramid mencocokkan ini dengan *view* statis yang terdaftar (`name='static'`, `path='tutorial:static'`) dan secara cerdas **menghasilkan URL yang benar**, yaitu `/static/app.css`.
 
-## 2. Kontekstualisasi Arsitektur: *Pluggable Renderers*
+-----
 
-Tahap ini adalah demonstrasi sempurna dari arsitektur Pyramid yang *pluggable* dan filosofi "agnostik".
+## 2\. Alur Eksekusi (*Request* Statis vs. Dinamis)
 
-* **Pemisahan Tanggung Jawab:** Ini menegaskan pemisahan yang diperkenalkan di Materi 8.
-    * **Tanggung Jawab *View***: Hanya mengembalikan `dict` (data).
-    * **Tanggung Jawab *Renderer***: Mengambil `dict` itu dan mengubahnya menjadi HTML.
-* **Netralitas *Framework***: Pyramid tidak peduli *bagaimana* `dict` diubah menjadi HTML, selama ada *renderer* yang terdaftar untuk ekstensi file yang ditentukan (dalam hal ini, `.jinja2`).
-* **Mekanisme `config.include`:** Panggilan `config.include('pyramid_jinja2')` menjalankan kode inisialisasi dari paket `pyramid_jinja2`, yang mendaftarkan "pabrik *renderer*" baru. Pabrik ini memberi tahu Pyramid, "Jika Anda melihat *renderer* yang diakhiri dengan `.jinja2`, gunakan saya untuk menanganinya."
-* **Fleksibilitas:** Sebuah aplikasi Pyramid bahkan dapat menggunakan **beberapa *renderer* secara bersamaan**. Satu *view* dapat diatur ke `renderer='page.pt'` (Chameleon) dan *view* lain diatur ke `renderer='widget.jinja2'` (Jinja2), selama kedua *add-on* tersebut di-*include*.
+Aplikasi ini sekarang menangani dua jenis permintaan yang berbeda:
 
----
+  * **Alur Permintaan Dinamis (misalnya, `GET /`)**
 
-## 3. Dampak pada Pengujian (`tutorial/tests.py`)
+    1.  Permintaan masuk ke `GET /`.
+    2.  `pserve` -\> `waitress` -\> `pyramid` router.
+    3.  Router mencocokkan rute `home` (URL `/`).
+    4.  Dipetakan ke `TutorialViews.home`.
+    5.  *View* mengembalikan `dict`.
+    6.  *Renderer* me-*render* `home.pt`.
+    7.  Selama me-*render*, `request.static_url(...)` dipanggil dan menghasilkan *string* URL `/static/app.css`.
+    8.  HTML akhir (yang berisi `<link href="/static/app.css">`) dikirim ke *browser*.
 
-Perubahan arsitektural ini **tidak memerlukan perubahan pada *test suite***, yang merupakan poin penting.
+  * **Alur Permintaan Statis (misalnya, `GET /static/app.css`)**
 
-* **Unit Tests (`TutorialViewTests`):**
-    * **Tidak ada perubahan.**
-    * **Mengapa?** *Unit test* menguji *kontrak* dari *method* *view*. Kontraknya adalah "method `home()` harus mengembalikan *dictionary* yang berisi `{'name': 'Home View'}`". Karena logika *view* tidak berubah, *unit test* tetap valid dan lulus. Ini membuktikan bahwa *unit test* berhasil mengisolasi logika bisnis dari lapisan presentasi.
+    1.  *Browser* membaca HTML dan melihat `<link href="/static/app.css">`, lalu membuat permintaan kedua.
+    2.  Permintaan masuk ke `GET /static/app.css`.
+    3.  *Router* Pyramid mencocokkan awalan `/static/` dengan *view* statis yang terdaftar (`name='static'`).
+    4.  *View* statis mengambil alih. Ia memetakan sisa path (`app.css`) ke *filesystem* (`tutorial/static/app.css`).
+    5.  *View* statis membaca file `app.css` dari disk dan mengirimkan kontennya kembali ke *browser* dengan `content_type` yang benar (`text/css`).
 
-* **Functional Tests (`TutorialFunctionalTests`):**
-    * **Tidak ada perubahan.**
-    * **Mengapa?** *Functional test* adalah tes *black-box*. Tes ini memvalidasi *output* HTML akhir. Karena templat `home.pt` dan `home.jinja2` (dalam contoh sederhana ini) menghasilkan HTML yang identik secara fungsional (misalnya, keduanya mengandung `<h1>Hi Home View</h1>`), *functional test* yang ada juga tetap lulus.
+-----
 
-**Kesimpulan Evaluasi:** Tahap ini membuktikan bahwa lapisan presentasi (template) dapat sepenuhnya ditukar tanpa memengaruhi logika bisnis (*view*) atau pengujian yang ada. Ini adalah kekuatan besar dari arsitektur Pyramid yang *decoupled* (terpisah).
+## 3\. Kontekstualisasi Arsitektur: *Asset Management*
+
+  * **Mengapa Menggunakan `add_static_view`?**
+
+      * Ini adalah cara standar Pyramid untuk menyajikan file statis **selama pengembangan**. Pyramid menangani *MIME type* dan *header* dengan benar.
+      * Di lingkungan **produksi** berperforma tinggi, *view* statis ini sering kali **tidak digunakan**. Sebagai gantinya, server web *frontend* (seperti Nginx) dikonfigurasi untuk mencegat permintaan `/static/` dan menyajikannya langsung dari *filesystem*, yang jauh lebih cepat karena tidak perlu melalui aplikasi Python (WSGI).
+
+  * **Mengapa Menggunakan `request.static_url`?**
+
+      * **Refactor-safe:** Jika tim memutuskan untuk mengubah nama *view* statis dari `name='static'` menjadi `name='assets'`, *hard-coded* URL `/static/app.css` akan rusak. Tetapi `request.static_url('tutorial:static/app.css')` **akan secara otomatis** menghasilkan URL baru (`/assets/app.css`) karena ia membaca konfigurasi.
+      * **Cache Busting:** Di aplikasi yang lebih canggih, `add_static_view` dapat dikonfigurasi dengan `cache_max_age`. `request.static_url` juga dapat di-override untuk secara otomatis menambahkan *query string* unik ke URL (misalnya, `/static/app.css?v=12345`) untuk "menghancurkan" *cache* *browser* saat file berubah.
+
+-----
+
+## 4\. Dampak pada Pengujian (`tutorial/tests.py`)
+
+  * **Unit Tests (`TutorialViewTests`):**
+
+      * **Tidak ada perubahan.** Logika *view* (mengembalikan *dict*) tidak berubah.
+
+  * **Functional Tests (`TutorialFunctionalTests`):**
+
+      * Tes baru, `test_css`, ditambahkan.
+      * Tes ini secara eksplisit memanggil `self.testapp.get('/static/app.css', status=200)`, memvalidasi bahwa *view* statis telah dikonfigurasi dengan benar dan menyajikan file.
+      * Tes ini juga memeriksa konten file (`self.assertIn(b'body', res.body)`) untuk memastikan file yang benar telah disajikan.
