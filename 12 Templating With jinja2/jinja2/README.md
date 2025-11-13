@@ -55,4 +55,3 @@ Perubahan arsitektural ini **tidak memerlukan perubahan pada *test suite***, yan
     * **Mengapa?** *Functional test* adalah tes *black-box*. Tes ini memvalidasi *output* HTML akhir. Karena templat `home.pt` dan `home.jinja2` (dalam contoh sederhana ini) menghasilkan HTML yang identik secara fungsional (misalnya, keduanya mengandung `<h1>Hi Home View</h1>`), *functional test* yang ada juga tetap lulus.
 
 **Kesimpulan Evaluasi:** Tahap ini membuktikan bahwa lapisan presentasi (template) dapat sepenuhnya ditukar tanpa memengaruhi logika bisnis (*view*) atau pengujian yang ada. Ini adalah kekuatan besar dari arsitektur Pyramid yang *decoupled* (terpisah).
-
